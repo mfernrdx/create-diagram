@@ -1,0 +1,46 @@
+We are seeking a highly skilled AI Automation Engineer to design and implement an end-to-end referral automation system for a multi-site oncology practice.
+
+This system will streamline incoming and outgoing patient referrals, reduce manual administrative burden, and improve referral conversion rates, turnaround time, and reporting accuracy.
+
+Scope of Work
+
+1. Incoming Referral Automation
+
+Extract referral data from:
+Fax (eFax / OCR)
+Email (structured & unstructured)
+EHR integrations (if applicable)
+Use AI/NLP to:
+Parse patient demographics, diagnosis, insurance, referring provider
+Identify urgency and referral type
+Auto-create structured entries in CRM/EHR
+Trigger workflow routing (scheduling, verification, intake)
+
+2. Outgoing Referral Automation
+
+Generate referral packets automatically (notes, imaging, labs)
+Identify appropriate specialists/providers based on rules
+Automate delivery (fax, secure email, portal)
+Track referral status and confirmations
+
+3. Workflow & Dashboard
+
+Build a centralized dashboard showing:
+Referral status (new, pending, scheduled, completed)
+Turnaround times
+Conversion rates
+Implement alerts for delays or missing documentation
+
+4. Integrations
+
+EHR (e.g., OncoEMR, Epic, or similar)
+Fax APIs (e.g., SRFax, HumbleFax, Twilio)
+Email parsing
+CRM/workflow tools (or custom lightweight system)
+
+5. Compliance
+
+HIPAA-compliant architecture
+Secure data handling and storage
+Audit logs and access controls
+Technical Requirements
