@@ -12,7 +12,7 @@ import re
 import subprocess
 import sys
 
-from renderer import render_to_file
+from renderer import render_combined, render_to_file
 
 SYSTEM_PROMPT = """\
 You are a technical diagram architect. Given an Upwork job description, \
@@ -101,6 +101,22 @@ def analyze_job(description: str, model: str = "sonnet") -> dict:
     raw = re.sub(r"\n```\s*$", "", raw)
 
     return json.loads(raw)
+
+
+def generate_diagram_json(description: str, model: str = "sonnet") -> dict:
+    """In-process variant: analyze + render, return rendered Excalidraw doc.
+
+    Returns {"title": <project title>, "excalidraw": <full excalidraw doc dict>}.
+    No file IO. Used by upwork_automation/trigger_agent.py.
+    """
+    spec = analyze_job(description, model=model)
+    diagrams = spec.get("diagrams", [])
+    if not diagrams:
+        raise ValueError("Analyzer returned no diagrams")
+    return {
+        "title": spec.get("title", "diagram"),
+        "excalidraw": render_combined(diagrams),
+    }
 
 
 def generate_diagrams(description: str, output_dir: str = "output") -> str:
