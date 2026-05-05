@@ -14,6 +14,9 @@ import sys
 
 from renderer import render_combined, render_to_file
 
+# Default API model. Matches what upwork_automation uses for scoring (Sonnet 4).
+DEFAULT_API_MODEL = "claude-sonnet-4-20250514"
+
 SYSTEM_PROMPT = """\
 You are a technical diagram architect. Given an Upwork job description, \
 break it down into clear, simple visual diagrams that show what the project \
@@ -76,38 +79,81 @@ Return ONLY valid JSON — no markdown fences, no explanation.
 """
 
 
-def analyze_job(description: str, model: str = "sonnet") -> dict:
-    """Send the job description to Claude CLI and get back a diagram spec."""
+def _strip_fences(raw: str) -> str:
+    raw = re.sub(r"^```(?:json)?\s*\n", "", raw.strip())
+    raw = re.sub(r"\n```\s*$", "", raw)
+    return raw
+
+
+def _analyze_via_api(description: str, model: str) -> dict:
+    """Call the Anthropic API directly. Used by upwork_automation's trigger_agent
+    where Claude CLI subprocess on Windows wedges silently. Requires
+    ANTHROPIC_API_KEY in env."""
+    import anthropic  # imported lazily so CLI mode doesn't require the SDK
+
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise RuntimeError("ANTHROPIC_API_KEY not set; cannot call Anthropic API")
+
+    client = anthropic.Anthropic(api_key=api_key)
+    response = client.messages.create(
+        model=model,
+        max_tokens=4096,
+        system=SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": description}],
+    )
+    # response.content is a list of content blocks; the first is the text
+    parts = [b.text for b in response.content if getattr(b, "type", None) == "text"]
+    raw = "".join(parts).strip()
+    return json.loads(_strip_fences(raw))
+
+
+def _analyze_via_cli(description: str, model: str) -> dict:
+    """Original Claude CLI path. Kept for standalone CLI usage of this repo —
+    upwork_automation's daemonized trigger_agent uses _analyze_via_api instead
+    because the CLI subprocess wedges under that supervisor on Windows."""
     result = subprocess.run(
         [
-            "claude", "-p",
+            "claude", "-p", description,
             "--system-prompt", SYSTEM_PROMPT,
             "--model", model,
             "--output-format", "text",
         ],
-        input=description,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=120,
     )
-
     if result.returncode != 0:
         raise RuntimeError(f"Claude CLI failed:\n{result.stderr}")
-
-    raw = result.stdout.strip()
-
-    # Strip markdown code fences if present
-    raw = re.sub(r"^```(?:json)?\s*\n", "", raw)
-    raw = re.sub(r"\n```\s*$", "", raw)
-
-    return json.loads(raw)
+    return json.loads(_strip_fences(result.stdout))
 
 
-def generate_diagram_json(description: str, model: str = "sonnet") -> dict:
+_API_ALIAS = {"sonnet": DEFAULT_API_MODEL, "haiku": "claude-haiku-4-5-20251001"}
+
+
+def analyze_job(description: str, model: str | None = None) -> dict:
+    """Send the job description to Claude and get back a diagram spec.
+
+    Routing:
+    - If ANTHROPIC_API_KEY is set → use Anthropic SDK (HTTP). This is what the
+      upwork_automation trigger_agent runs into; the CLI subprocess path
+      reliably wedges under that supervisor on Windows.
+    - Otherwise → fall back to the `claude` CLI for standalone use of this repo.
+    """
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        api_model = _API_ALIAS.get(model, model) if model else DEFAULT_API_MODEL
+        return _analyze_via_api(description, api_model)
+    return _analyze_via_cli(description, model or "sonnet")
+
+
+def generate_diagram_json(description: str, model: str | None = None) -> dict:
     """In-process variant: analyze + render, return rendered Excalidraw doc.
 
     Returns {"title": <project title>, "excalidraw": <full excalidraw doc dict>}.
-    No file IO. Used by upwork_automation/trigger_agent.py.
+    No file IO. Used by upwork_automation/trigger_agent.py. When model is None,
+    analyze_job picks the default for whichever path it routes to (API vs CLI).
     """
     spec = analyze_job(description, model=model)
     diagrams = spec.get("diagrams", [])
